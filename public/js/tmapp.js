@@ -328,15 +328,19 @@ const tmapp = (function() {
             }
         };
 
+        function eventPositionToAnnotationPosition(event) {
+            const coords = coordinateHelper.webToViewport(event.position);
+            return {
+                x: coords.x,
+                y: coords.y,
+                z: _currState.z
+            };
+        }
+
         // Note, a dblClick triggers: click+click+dblClick
         function dblClickHandler(event) {
             if(!event.ctrlKey && tmappUI.inFocus()){
-                const coords = coordinateHelper.webToViewport(event.position);
-                const position = {
-                    x: coords.x,
-                    y: coords.y,
-                    z: _currState.z
-                };
+                const position = eventPositionToAnnotationPosition(event);
                 setCursorStatus(position);
                 annotationTool.dblClick(position);
             }
@@ -355,6 +359,9 @@ const tmapp = (function() {
         function moveHandler(event) {
             mouse_pos = event.position;
             updateMousePos();
+            if (annotationTool.isEditing() && tmappUI.inFocus()) {
+                annotationTool.updateMousePosition(eventPositionToAnnotationPosition(event));
+            }
             _currentMouseUpdateFun = updateMousePos;
         }
 
@@ -403,14 +410,23 @@ const tmapp = (function() {
 
         viewer.addHandler('canvas-press', function(event) {
             heldHandler(true)(event);
+            if (!event.ctrlKey && tmappUI.inFocus()) {
+                annotationTool.press(eventPositionToAnnotationPosition(event));
+            }
         });
 
         viewer.addHandler('canvas-release', function(event) {
             heldHandler(false)(event);
+            if (!event.ctrlKey && tmappUI.inFocus()) {
+                annotationTool.release(eventPositionToAnnotationPosition(event));
+            }
         });
 
         viewer.addHandler('canvas-drag', function(event) {
             moveHandler(event);
+            if (annotationTool.isEditing() && tmappUI.inFocus()) {
+                event.preventDefaultAction = true;
+            }
         });
 
         viewer.container.addEventListener('mousemove', event => {

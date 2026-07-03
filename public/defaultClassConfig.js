@@ -8,18 +8,18 @@
  */
 const defaultClassConfig = [
     {
-        name: "TIL",
-        description: "TIL region",
-        color: "#e86f26"
+        name: "Bark beetle",
+        description: "Whole bark beetle",
+        color: "#d95f02"
     },
     {
-        name: "Non-TIL",
-        description: "Region that does not contain any TIL regions",
-        color: "#67b5da"
+        name: "Other beetle",
+        description: "Whole beetle that is not the target bark beetle",
+        color: "#1b9e77"
     },
     {
-        name: "Other",
-        description: "Does not fit other classes",
-        color: "#919191"
+        name: "Beetle head",
+        description: "Detached beetle head",
+        color: "#7570b3"
     }
 ];

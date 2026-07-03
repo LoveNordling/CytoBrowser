@@ -216,10 +216,183 @@ const annotationTool = (function() {
         };
     })();
 
+    // Tool for adding a fixed-ratio rotated oval around a whole bark beetle.
+    const _barkBeetleTool = (function() {
+        const WIDTH_TO_HEIGHT_RATIO = 0.45;
+        const ELLIPSE_SEGMENTS = 32;
+        const MIN_AXIS_LENGTH = 3;
+        const DRAG_COMPLETE_DISTANCE = 6;
+
+        let _startPoint,
+            _endPoint,
+            _zLevel,
+            _mclass,
+            _birthTime,
+            _dragging = false,
+            _suppressNextClick = false;
+
+        function _distance(a, b) {
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            return Math.hypot(dx, dy);
+        }
+
+        function _viewportPositionToImage(position) {
+            return coordinateHelper.viewportToImage({
+                x: position.x,
+                y: position.y
+            });
+        }
+
+        function _getEllipsePoints(startPoint, endPoint) {
+            const dx = endPoint.x - startPoint.x;
+            const dy = endPoint.y - startPoint.y;
+            const majorLength = Math.hypot(dx, dy);
+            if (majorLength < MIN_AXIS_LENGTH) {
+                return [];
+            }
+
+            const center = {
+                x: (startPoint.x + endPoint.x) / 2,
+                y: (startPoint.y + endPoint.y) / 2
+            };
+            const ux = dx / majorLength;
+            const uy = dy / majorLength;
+            const vx = -uy;
+            const vy = ux;
+            const majorRadius = majorLength / 2;
+            const minorRadius = majorRadius * WIDTH_TO_HEIGHT_RATIO;
+            const points = [];
+
+            for (let i = 0; i < ELLIPSE_SEGMENTS; i++) {
+                const angle = 2 * Math.PI * i / ELLIPSE_SEGMENTS;
+                const majorOffset = Math.cos(angle) * majorRadius;
+                const minorOffset = Math.sin(angle) * minorRadius;
+                points.push({
+                    x: center.x + ux * majorOffset + vx * minorOffset,
+                    y: center.y + uy * majorOffset + vy * minorOffset
+                });
+            }
+            return points;
+        }
+
+        function _getAnnotation() {
+            return {
+                points: _getEllipsePoints(_startPoint, _endPoint),
+                z: _zLevel,
+                mclass: _mclass
+            };
+        }
+
+        function _updatePending() {
+            if (!_startPoint || !_endPoint) {
+                return;
+            }
+            const annotation = _getAnnotation();
+            if (annotation.points.length > 2) {
+                layerHandler.topLayer().updatePendingRegion(annotation);
+            }
+        }
+
+        function reset() {
+            _startPoint = null;
+            _endPoint = null;
+            _dragging = false;
+            layerHandler.topLayer().name === "region" && layerHandler.topLayer().updatePendingRegion(null);
+        }
+
+        function _start(position, dragging=false) {
+            _startPoint = _viewportPositionToImage(position);
+            _endPoint = _startPoint;
+            _zLevel = position.z;
+            _mclass = _activeMclass;
+            _birthTime = Date.now();
+            _dragging = dragging;
+        }
+
+        function _setEnd(position) {
+            if (!_startPoint) {
+                return;
+            }
+            _endPoint = _viewportPositionToImage(position);
+            _zLevel = position.z;
+            _mclass = _activeMclass;
+            _updatePending();
+        }
+
+        function complete(position) {
+            _setEnd(position);
+            if (!_startPoint || !_endPoint) {
+                return;
+            }
+            if (_distance(_startPoint, _endPoint) < MIN_AXIS_LENGTH) {
+                reset();
+                return;
+            }
+            const annotation = _getAnnotation();
+            if (annotation.points.length > 2 && !mathUtils.pathIntersectsSelf(annotation.points)) {
+                annotationHandler.add(annotation, "image");
+            }
+            reset();
+        }
+
+        function click(position) {
+            if (_suppressNextClick) {
+                _suppressNextClick = false;
+                return;
+            }
+            if (_startPoint) {
+                complete(position);
+            }
+            else {
+                _start(position);
+                _updatePending();
+            }
+        }
+
+        function press(position) {
+            if (_startPoint) {
+                return;
+            }
+            _start(position, true);
+        }
+
+        function release(position) {
+            if (!_dragging || !_startPoint) {
+                return;
+            }
+            const endPoint = _viewportPositionToImage(position);
+            if (_distance(_startPoint, endPoint) >= DRAG_COMPLETE_DISTANCE) {
+                _suppressNextClick = true;
+                setTimeout(() => _suppressNextClick = false, 250);
+                complete(position);
+            }
+            else {
+                reset();
+            }
+        }
+
+        return {
+            click: click,
+            press: press,
+            release: release,
+            dblClick: function() {},
+            complete: complete,
+            update: _setEnd,
+            revert: reset,
+            reset: reset,
+            isEditing: () => _startPoint != null,
+            resetIfYounger: (time) => {
+                if (Date.now()-_birthTime<time) reset();
+            }
+        };
+    })();
+
     const _tools = {
         marker: _markerTool,
         rect: _rectTool,
-        poly: _polyTool
+        poly: _polyTool,
+        "bark-beetle": _barkBeetleTool
     };
 
     let _activeTool,
@@ -329,6 +502,20 @@ const annotationTool = (function() {
         _callToolFunction("update", position);
     }
 
+    /**
+     * Let tools react to a mouse press before click/drag handling.
+     */
+    function press(position) {
+        _callToolFunction("press", position);
+    }
+
+    /**
+     * Let tools react to a mouse release after optional dragging.
+     */
+    function release(position) {
+        _callToolFunction("release", position);
+    }
+
     function isEditing() {
         return _callToolFunction("isEditing");
     }
@@ -348,6 +535,8 @@ const annotationTool = (function() {
         reset,
         revert,
         updateMousePosition,
+        press,
+        release,
         isEditing,
         resetIfYounger
     };

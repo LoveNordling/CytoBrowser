@@ -254,6 +254,10 @@ const tmappUI = (function(){
             layerHandler.setActiveAnnotationOverlay("region");
             annotationTool.setTool("poly");
         });
+        $("#tool_bark_beetle").click(() => {
+            layerHandler.setActiveAnnotationOverlay("region");
+            annotationTool.setTool("bark-beetle");
+        });
         $("#toggle_region_visibility").click(() => {
             const regionLayer = layerHandler.getLayer("region");
             if (!regionLayer) {
